@@ -2,11 +2,10 @@ import streamlit as st
 import pandas as pd
 
 # --- 页面配置 ---
-st.set_page_config(page_title="私人健身计划助手", page_icon="💪", layout="wide")
+st.set_page_config(page_title="私人健身计划助手 Pro", page_icon="💪", layout="wide")
 
 # --- 核心逻辑函数 ---
 def calculate_bmr(gender, weight, height, age):
-    # Mifflin-St Jeor 公式
     if gender == '男':
         return (10 * weight) + (6.25 * height) - (5 * age) + 5
     else:
@@ -22,102 +21,66 @@ def get_tdee(bmr, activity_level):
     }
     return bmr * levels[activity_level]
 
-def generate_plan(goal, tdee, weight):
+def generate_macros(goal, tdee, weight):
     if goal == "减脂":
-        target_calories = tdee - 500
-        protein_g = weight * 2.2  # 减脂期高蛋白保肌
-        fat_g = weight * 0.8
+        target = tdee - 500
+        prot = weight * 2.0
+        fat = weight * 0.8
     elif goal == "增肌":
-        target_calories = tdee + 300
-        protein_g = weight * 2.0
-        fat_g = weight * 1.0
-    else:  # 维持
-        target_calories = tdee
-        protein_g = weight * 1.8
-        fat_g = weight * 0.9
+        target = tdee + 300
+        prot = weight * 2.2
+        fat = weight * 1.0
+    else:
+        target = tdee
+        prot = weight * 1.8
+        fat = weight * 0.9
     
-    # 计算碳水
-    remaining_cal = target_calories - (protein_g * 4) - (fat_g * 9)
-    carbs_g = remaining_cal / 4
-    
-    return int(target_calories), int(protein_g), int(fat_g), int(carbs_g)
+    carb = (target - prot*4 - fat*9) / 4
+    return int(target), int(prot), int(fat), int(carb)
 
-# --- 界面 UI ---
-st.title("💪 AI 健身计划助手")
-st.markdown("输入您的身体数据，获取今日的**热量缺口**、**饮食建议**与**训练方案**。")
+# --- 生成具体食谱 ---
+def get_detailed_diet(calories, goal):
+    # 简单逻辑：根据热量档位推荐食谱
+    if calories < 1600:
+        plan_type = "低热量 (减脂)"
+        menu = {
+            "早餐": "无糖燕麦片(40g) + 水煮蛋(1个) + 脱脂牛奶(200ml)",
+            "午餐": "杂粮饭(100g) + 鸡胸肉(150g) + 西兰花(200g)",
+            "晚餐": "玉米(1根) + 蒸鱼/虾(100g) + 凉拌黄瓜",
+            "加餐": "一个小苹果 或 蓝莓(100g)"
+        }
+    elif calories < 2200:
+        plan_type = "中热量 (均衡)"
+        menu = {
+            "早餐": "全麦面包(2片) + 煎蛋(2个) + 纯牛奶(250ml)",
+            "午餐": "米饭(150g) + 瘦牛肉(150g) + 炒时蔬(200g)",
+            "晚餐": "红薯(200g) + 鸡腿肉(去皮150g) + 蔬菜汤",
+            "加餐": "无糖酸奶(1杯) + 坚果(10g)"
+        }
+    else:
+        plan_type = "高热量 (增肌)"
+        menu = {
+            "早餐": "燕麦粥(80g) + 全蛋(3个) + 全脂牛奶(300ml) + 香蕉",
+            "午餐": "米饭(250g) + 牛排/肥牛(200g) + 任意蔬菜",
+            "晚餐": "意面(200g) + 鱼肉(200g) + 蔬菜沙拉(加橄榄油)",
+            "加餐": "蛋白粉(1勺) + 吐司(2片) + 花生酱"
+        }
+    return plan_type, menu
 
-with st.sidebar:
-    st.header("📋 1. 您的档案")
-    gender = st.radio("性别", ["男", "女"], horizontal=True)
-    col1, col2 = st.columns(2)
-    with col1:
-        age = st.number_input("年龄", 18, 80, 25)
-        height = st.number_input("身高 (cm)", 100, 250, 175)
-    with col2:
-        weight = st.number_input("当前体重 (kg)", 30.0, 200.0, 70.0)
-        goal = st.selectbox("当前目标", ["减脂", "增肌", "维持"])
-    
-    activity = st.selectbox("日常活动量", [
-        "久坐 (几乎不运动)",
-        "轻度活跃 (每周1-3次运动)",
-        "中度活跃 (每周3-5次运动)",
-        "非常活跃 (每周6-7次运动)",
-        "超级活跃 (体力工作+高强度训练)"
-    ])
-    
-    st.markdown("---")
-    st.header("📉 2. 进度对比 (选填)")
-    has_history = st.checkbox("我有上一次的数据")
-    if has_history:
-        last_weight = st.number_input("上次体重 (kg)", 30.0, 200.0, 71.0)
-        last_waist = st.number_input("上次腰围 (cm)", 40.0, 150.0, 85.0)
-        current_waist = st.number_input("当前腰围 (cm)", 40.0, 150.0, 84.0)
-
-# --- 主体计算 ---
-if st.button("🚀 生成我的计划", type="primary"):
-    bmr = calculate_bmr(gender, weight, height, age)
-    tdee = get_tdee(bmr, activity)
-    target_cal, prot, fat, carb = generate_plan(goal, tdee, weight)
-    
-    st.subheader("📊 每日热量与营养目标")
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("每日热量目标", f"{target_cal} kcal", f"{target_cal - int(tdee)} vs TDEE")
-    c2.metric("蛋白质", f"{prot} g", "肌肉原料")
-    c3.metric("脂肪", f"{fat} g", "激素合成")
-    c4.metric("碳水化合物", f"{carb} g", "能量来源")
-    
-    if has_history:
-        st.subheader("📉 您的变化趋势")
-        col_chart1, col_text = st.columns([2, 1])
-        with col_chart1:
-            st.bar_chart(data=pd.DataFrame({
-                '上次': [last_weight], 
-                '本次': [weight]
-            }, index=["体重 (kg)"]))
-        with col_text:
-            weight_diff = round(weight - last_weight, 2)
-            if weight_diff < 0:
-                st.success(f"🎉 恭喜！体重下降了 {abs(weight_diff)} kg")
-            elif weight_diff > 0:
-                st.warning(f"⚠️ 体重上升了 {weight_diff} kg")
-            else:
-                st.info("⚖️ 体重持平")
-
-    st.markdown("---")
-    col_diet, col_workout = st.columns(2)
-    with col_diet:
-        st.subheader("🥗 推荐饮食结构")
-        st.info(f"""
-        **早餐**: {int(target_cal*0.3)} kcal
-        **午餐**: {int(target_cal*0.4)} kcal
-        **晚餐**: {int(target_cal*0.2)} kcal
-        **加餐**: {int(target_cal*0.1)} kcal
-        """)
-    with col_workout:
-        st.subheader("🏋️‍♂️ 推荐训练方案")
-        if goal == "减脂":
-            st.write("重点：力量训练保代谢 + 有氧造缺口")
-        elif goal == "增肌":
-            st.write("重点：大重量破坏肌纤维 + 盈余热量修复")
-        else:
-            st.write("重点：改善体态 + 维持代谢")
+# --- 生成具体训练表 ---
+def get_workout_plan(goal, gender):
+    if goal == "减脂":
+        focus = "全身循环 + 有氧"
+        df = pd.DataFrame([
+            ["热身", "开合跳/高抬腿", "2组", "30秒", "无"],
+            ["力量 A", "徒手深蹲 / 哑铃深蹲", "4组", "15-20次", "60秒"],
+            ["力量 B", "俯卧撑 (跪姿)", "4组", "力竭", "60秒"],
+            ["力量 C", "哑铃划船 / 弹力带划船", "4组", "15次", "60秒"],
+            ["核心", "平板支撑", "3组", "45秒", "30秒"],
+            ["有氧", "快走/爬坡/跳绳", "1次", "30-40分钟", "保持心率130+"]
+        ], columns=["板块", "动作", "组数", "次数/时长", "组间休息"])
+        
+    elif goal == "增肌":
+        focus = "大重量分化训练"
+        df = pd.DataFrame([
+            ["热身", "肩袖激活 + 空
