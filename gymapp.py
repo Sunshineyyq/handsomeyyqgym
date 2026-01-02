@@ -1,6 +1,5 @@
 import streamlit as st
 import pandas as pd
-import matplotlib.pyplot as plt
 
 # --- 页面配置 ---
 st.set_page_config(page_title="私人健身计划助手", page_icon="💪", layout="wide")
